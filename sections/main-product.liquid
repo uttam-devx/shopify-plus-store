@@ -60,6 +60,16 @@
       {% render 'product-media-gallery', variant_images: variant_images %}
     </div>
     <div class="product__info-wrapper grid__item{% if settings.page_width > 1400 and section.settings.media_size == "small" %} product__info-wrapper--extra-padding{% endif %}">
+      {% if product.metafields.custom.enable_pack %}
+        <div class="pack-selector">
+          <label for="pack-size">Choose Pack Size:</label>
+          <select id="pack-size" name="pack_size">
+            <option value="1">Pack of 1</option>
+            <option value="2">Pack of 2 (Best Deal)</option>
+          </select>
+        </div>
+      {% endif %}
+      
       <product-info
         id="ProductInfo-{{ section.id }}"
         data-section="{{ section.id }}"

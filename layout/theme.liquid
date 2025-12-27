@@ -300,4 +300,18 @@
       <script src="{{ 'predictive-search.js' | asset_url }}" defer="defer"></script>
     {%- endif -%}
   </body>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const packSelector = document.querySelector('#pack-size');
+      const quantityField = document.querySelector('input[name="quantity"]');
+
+      if (packSelector && quantityField) {
+        packSelector.addEventListener('change', function () {
+          const packValue = parseInt(packSelector.value);
+          quantityField.value = packValue;
+        });
+      }
+    });
+  </script>
 </html>
