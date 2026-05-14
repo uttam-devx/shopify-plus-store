@@ -102,7 +102,7 @@
     "1778751249cec563a3": {
       "type": "apps",
       "blocks": {
-        "instagram_feed_app_instagram_feed_DNcmWc": {
+        "instagram_feed_app_instagram_feed_4aeYqR": {
           "type": "shopify://apps/instagram-feed-app/blocks/instagram-feed/019e1bfe-e8ab-79eb-896f-84b28faf10db",
           "settings": {
             "section_title": "Follow Us on Instagram",
@@ -130,7 +130,7 @@
         }
       },
       "block_order": [
-        "instagram_feed_app_instagram_feed_DNcmWc"
+        "instagram_feed_app_instagram_feed_4aeYqR"
       ],
       "settings": {
         "include_margins": true
