@@ -119,7 +119,7 @@
             "reels_limit": 6,
             "reels_manual_select": false,
             "reels_urls": "",
-            "layout_type": "grid",
+            "layout_type": "horizontal_scroll",
             "mobile_columns": 2,
             "tablet_columns": 3,
             "desktop_columns": 4,
