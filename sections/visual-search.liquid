@@ -724,6 +724,11 @@
       return;
     }
 
+    // Reset any prior in-flight or completed upload
+    activeUploadController?.abort();
+    uploadedBlueprint = null;
+    uploadPromise = null;
+
     selectedFile = file;
 
     const reader = new FileReader();
@@ -734,12 +739,17 @@
       searchBtn.disabled = false;
     };
     reader.readAsDataURL(file);
+
+    // Fire steps 1+2 in the background — user sees progress while configuring search
+    uploadPromise = uploadInBackground(file);
   }
 
   function handleRemove(e) {
     e.preventDefault();
     e.stopPropagation();
     activeUploadController?.abort();
+    uploadedBlueprint = null;
+    uploadPromise = null;
     selectedFile = null;
     fileInput.value = '';
     previewImg.src = '';
@@ -753,6 +763,8 @@
   const AI_TEST_IMAGE_URL   = 'https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcT0plpb03JNSm2H2m4eGMEBX40a1wPbALG1x79d9sYYh-QUV6EihMt2ZGX1yEIOOegwu6VcdLzlgb76Uk81fV5Aru90bg1cT_tJueCdJ9MyLz3FE1MyvnTJAAA';
 
   let activeUploadController = null;
+  let uploadPromise = null;       // in-flight upload (steps 1+2) — null when idle
+  let uploadedBlueprint = null;   // set once upload completes successfully
 
   // ─── STEP 1: Initialize — fetch the upload blueprint from our Lambda ───
   async function getUploadBlueprint(file) {
@@ -834,10 +846,8 @@
     progressBar.style.setProperty('--vs-progress', '0%');
   }
 
-  async function handleSearch() {
-    if (!selectedFile) return;
-
-    activeUploadController?.abort();
+  // ─── Background upload: STEPS 1 + 2 — runs the moment a file is picked ───
+  async function uploadInBackground(file) {
     activeUploadController = new AbortController();
     const { signal } = activeUploadController;
 
@@ -846,9 +856,8 @@
     setLoadingMessage('Preparing upload…');
 
     try {
-      // STEP 1 — Initialize
       console.log('[visual-search] ── STEP 1: initialize');
-      const blueprint = await getUploadBlueprint(selectedFile);
+      const blueprint = await getUploadBlueprint(file);
       console.log('[visual-search] blueprint:', {
         url: blueprint.url.split('?')[0],
         method: blueprint.method,
@@ -857,12 +866,11 @@
       });
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-      // STEP 2 — Upload (with live progress bar)
       console.log('[visual-search] ── STEP 2: upload');
       setLoadingMessage('Uploading 0%…');
       setProgress(0);
       await uploadToCloud(
-        selectedFile,
+        file,
         blueprint,
         (pct) => {
           setProgress(pct);
@@ -870,28 +878,66 @@
         },
         signal,
       );
-      console.log('[visual-search] uploaded:', blueprint.s3Key || blueprint.url.split('?')[0]);
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
 
-      // STEP 3 — Search
-      console.log('[visual-search] ── STEP 3: search');
+      uploadedBlueprint = blueprint;
+      console.log('[visual-search] upload complete:', blueprint.s3Key || blueprint.url.split('?')[0]);
+      return blueprint;
+    } catch (err) {
+      uploadedBlueprint = null;
+      if (err.name === 'AbortError') {
+        console.log('[visual-search] upload aborted');
+      } else {
+        console.error('[visual-search] upload FAILED:', err);
+        alert(`Upload failed: ${err.message}`);
+      }
+      throw err;
+    } finally {
+      loadingEl.hidden = true;
       resetProgress();
+      activeUploadController = null;
+    }
+  }
+
+  // ─── Search click: STEP 3 only ───
+  async function handleSearch() {
+    if (!selectedFile) return;
+
+    loadingEl.hidden = false;
+    searchBtn.disabled = true;
+
+    try {
+      // If the background upload hasn't finished yet, wait for it
+      if (!uploadedBlueprint) {
+        if (!uploadPromise) {
+          alert('Please pick an image first.');
+          return;
+        }
+        setLoadingMessage('Waiting for upload to finish…');
+        try {
+          await uploadPromise;
+        } catch {
+          return; // upload error already surfaced by uploadInBackground
+        }
+      }
+
+      if (!uploadedBlueprint) return;
+
+      console.log('[visual-search] ── STEP 3: search');
       setLoadingMessage('Analysing your image…');
+
       const category = container.querySelector('[data-vs-category]')?.value || 'ring';
       const topK = Number(slider.value) || 10;
-      const imageForAI = blueprint.imageUrl || AI_TEST_IMAGE_URL;
+      const imageForAI = uploadedBlueprint.imageUrl || AI_TEST_IMAGE_URL;
 
       let aiSkus = null;
       try {
-        const aiData = await searchByImage(imageForAI, category, topK, signal);
+        const aiData = await searchByImage(imageForAI, category, topK);
         console.log('[visual-search] AI response:', aiData);
         aiSkus = aiData?.items?.[0]?.skus ?? null;
       } catch (aiErr) {
-        if (aiErr.name === 'AbortError') throw aiErr;
         console.warn('[visual-search] AI call failed (expected until backend HTTPS+CORS):', aiErr.message);
       }
 
-      // STEP 4 — Render
       if (aiSkus && aiSkus.length > 0) {
         console.log(`[visual-search] rendering ${aiSkus.length} AI matches`);
         renderAIResults(aiSkus);
@@ -899,17 +945,9 @@
         console.log('[visual-search] rendering demo fallback');
         renderResults(DEMO_PRODUCTS.slice(0, topK));
       }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        console.log('[visual-search] aborted');
-      } else {
-        console.error('[visual-search] FAILED:', err);
-        alert(`Upload failed: ${err.message}`);
-      }
     } finally {
       loadingEl.hidden = true;
-      resetProgress();
-      activeUploadController = null;
+      searchBtn.disabled = !selectedFile;
     }
   }
 
